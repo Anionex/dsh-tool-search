@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.20.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm validate
+      - run: git diff --exit-code -- lib docs/benchmark-results.json
+
+  profile-e2e:
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dsh-version:
+          - 0.1.1-rc.1
+          - 0.1.2-rc.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.8.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.20.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install DSH ${{ matrix.dsh-version }}
+        run: npm install --prefix "$RUNNER_TEMP/dsh-${{ matrix.dsh-version }}" "@deepseek-ai/dsh@${{ matrix.dsh-version }}" --no-audit --no-fund
+      - name: Run DSH ${{ matrix.dsh-version }} Profile E2E
+        run: pnpm run e2e:profile
+        env:
+          DSH_BIN: ${{ runner.temp }}/dsh-${{ matrix.dsh-version }}/node_modules/.bin/dsh
+          DSH_TOOL_SEARCH_REQUIRE_BARE: ${{ matrix.dsh-version == '0.1.2-rc.1' && '1' || '0' }}

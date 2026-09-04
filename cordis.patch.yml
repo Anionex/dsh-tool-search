@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-tool-search
+      name: '@anionex/dsh-tool-search'

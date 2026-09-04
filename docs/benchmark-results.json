@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 2,
+  "packageVersion": "0.1.0",
+  "tokenizer": "gpt-tokenizer 4.0.0 (o200k_base default encode)",
+  "fixture": {
+    "description": "Deterministic nested function schemas; full surface versus tool_search-only initial surface.",
+    "generator": "scripts/benchmark.mjs",
+    "generatorSha256": "146898e3a92876fb35d9531c65950e940b664e7d77fa72e9a9c31169337adec1",
+    "corpusSha256": "2a7e824f3891f37b4633f09f3a814abd5d071c28a421b75a41580df9528745e2",
+    "sizes": [
+      10,
+      30,
+      50,
+      100
+    ]
+  },
+  "rows": [
+    {
+      "tools": 10,
+      "fullTokens": 1822,
+      "deferredInitialTokens": 103,
+      "initialTokensSaved": 1719,
+      "initialReductionPercent": 94.3,
+      "afterTop5Tokens": 1013
+    },
+    {
+      "tools": 30,
+      "fullTokens": 5462,
+      "deferredInitialTokens": 103,
+      "initialTokensSaved": 5359,
+      "initialReductionPercent": 98.1,
+      "afterTop5Tokens": 1013
+    },
+    {
+      "tools": 50,
+      "fullTokens": 9102,
+      "deferredInitialTokens": 103,
+      "initialTokensSaved": 8999,
+      "initialReductionPercent": 98.9,
+      "afterTop5Tokens": 1013
+    },
+    {
+      "tools": 100,
+      "fullTokens": 18202,
+      "deferredInitialTokens": 103,
+      "initialTokensSaved": 18099,
+      "initialReductionPercent": 99.4,
+      "afterTop5Tokens": 1013
+    }
+  ]
+}

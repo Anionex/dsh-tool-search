@@ -1,0 +1,31 @@
+/** Values shared by the Host runtime and Web settings client. */
+export declare const TOOL_SEARCH_NAME = "tool_search";
+export declare const TOOL_SEARCH_SETTINGS_NAMESPACE = "tool-search";
+export declare const TOOL_SEARCH_CATALOG_ROUTE = "/_dsh/tool-search/catalog";
+export declare const DEFAULT_RESULT_LIMIT = 5;
+export declare const MAX_RESULT_LIMIT = 20;
+/**
+ * Stable bootstrap surface for current DSH releases. Unknown future first-party
+ * names are deferred until this list or the user allowlist is updated because
+ * ToolDefinition does not expose package provenance.
+ */
+export declare const DEFAULT_CORE_TOOLS: readonly ["apply_patch", "ask_user_question", "bash", "create_goal", "dsh_im_return_file", "exit_plan_mode", "get_goal", "interrupt_agent", "job_kill", "job_list", "job_output", "list_agents", "ralph", "report", "send_message", "skill", "subagent", "subagent_fork", "todo_write", "update_goal", "workflow"];
+export interface ToolSearchSettings {
+    defaultLimit: number;
+    alwaysVisible: string[];
+    neverSearch: string[];
+}
+export declare const DEFAULT_SETTINGS: Readonly<ToolSearchSettings>;
+export type ToolPolicy = 'always' | 'deferred' | 'blocked';
+export interface CatalogToolSummary {
+    name: string;
+    description: string;
+    policy: ToolPolicy;
+    selectedBy: string[];
+}
+export interface CatalogSnapshot {
+    schemaVersion: 1;
+    generation: number;
+    tools: CatalogToolSummary[];
+}
+//# sourceMappingURL=shared.d.ts.map
