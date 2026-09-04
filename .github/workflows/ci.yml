@@ -21,6 +21,7 @@ jobs:
           node-version: 22.20.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm peers check
       - run: pnpm validate
       - run: git diff --exit-code -- lib docs/benchmark-results.json
 
