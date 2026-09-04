@@ -28,6 +28,7 @@ jobs:
   profile-e2e:
     needs: validate
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -45,7 +46,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Install DSH ${{ matrix.dsh-version }}
-        run: npm install --prefix "$RUNNER_TEMP/dsh-${{ matrix.dsh-version }}" "@deepseek-ai/dsh@${{ matrix.dsh-version }}" --no-audit --no-fund
+        run: npm install --prefix "$RUNNER_TEMP/dsh-${{ matrix.dsh-version }}" "@deepseek-ai/dsh@${{ matrix.dsh-version }}" --ignore-scripts --no-audit --no-fund
       - name: Run DSH ${{ matrix.dsh-version }} Profile E2E
         run: pnpm run e2e:profile
         env:
