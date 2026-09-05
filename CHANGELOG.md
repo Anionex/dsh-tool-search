@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1 - 2026-09-05
+
+- Defer the plugin-provided `dsh_im_return_file` tool instead of treating it as a maintained DSH core tool.
+
 ## 0.1.0 - 2026-09-05
 
 - Add deterministic local BM25 discovery for deferred DSH tools.

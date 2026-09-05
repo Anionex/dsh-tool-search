@@ -48,6 +48,7 @@ declare const en: {
     selected: string;
     defaultPolicy: string;
     alwaysPolicy: string;
+    deferredPolicy: string;
     blockedPolicy: string;
     loading: string;
     empty: string;

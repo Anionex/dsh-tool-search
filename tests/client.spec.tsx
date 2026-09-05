@@ -23,12 +23,21 @@ describe('Tool Search settings section', () => {
         description: 'Capture a browser screenshot.',
         policy: 'deferred',
         selectedBy: [],
+      }, {
+        name: 'dsh_im_return_file',
+        description: 'Send a readable file to the user.',
+        policy: 'deferred',
+        selectedBy: [],
       }],
     }), { status: 200 }))))
 
     render(<ToolSearchSettingsSection scope={scope} />)
     expect(await screen.findByText('browser_take_screenshot')).toBeDefined()
-    expect(screen.getByLabelText('Live agents: 0').getAttribute('data-label')).toBe('Live agents')
+    const imPolicy = screen.getByLabelText('Policy: dsh_im_return_file') as HTMLSelectElement
+    expect(imPolicy.value).toBe('default')
+    expect(imPolicy.options[0]?.text).toBe('Default (Deferred)')
+    expect(screen.getAllByLabelText('Live agents: 0').map(element => element.getAttribute('data-label')))
+      .toEqual(['Live agents', 'Live agents'])
     fireEvent.change(screen.getByLabelText('Policy: browser_take_screenshot'), { target: { value: 'always' } })
     await waitFor(() => {
       expect(set).toHaveBeenCalledWith('alwaysVisible', ['browser_take_screenshot'])

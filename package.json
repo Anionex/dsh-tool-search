@@ -1,6 +1,6 @@
 {
   "name": "@anionex/dsh-tool-search",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Codex-style deferred tool loading for DSH with deterministic local BM25 search",
   "keywords": [
     "deepseek",

@@ -24,6 +24,7 @@ describe('tool exposure policy', () => {
     expect(policy.classify(TOOL_SEARCH_NAME)).toBe('always')
     expect(policy.classify('apply_patch')).toBe('always')
     expect(policy.classify('report')).toBe('always')
+    expect(policy.classify('dsh_im_return_file')).toBe('deferred')
     expect(policy.classify('bash')).toBe('blocked')
     expect(policy.classify('custom_tool')).toBe('always')
     expect(policy.classify('conflict_tool')).toBe('blocked')

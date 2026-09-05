@@ -16,7 +16,6 @@ export const DEFAULT_CORE_TOOLS = Object.freeze([
   'ask_user_question',
   'bash',
   'create_goal',
-  'dsh_im_return_file',
   'exit_plan_mode',
   'get_goal',
   'interrupt_agent',

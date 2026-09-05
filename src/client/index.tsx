@@ -73,6 +73,7 @@ const en = {
   selected: 'Live agents',
   defaultPolicy: 'Default',
   alwaysPolicy: 'Always',
+  deferredPolicy: 'Deferred',
   blockedPolicy: 'Blocked',
   loading: 'Loading...',
   empty: 'No matching tools',
@@ -93,6 +94,7 @@ const zh: typeof en = {
   selected: '活跃 Agent',
   defaultPolicy: '默认',
   alwaysPolicy: '常驻',
+  deferredPolicy: '延迟',
   blockedPolicy: '禁用',
   loading: '加载中...',
   empty: '没有匹配工具',
@@ -296,7 +298,9 @@ export function ToolSearchSettingsSection({ scope, t }: SettingsProps): ReactNod
                   disabled={!snapshot.writable || tool.name === TOOL_SEARCH_NAME}
                   onChange={event => changePolicy(tool.name, event.target.value as ToolPolicy | 'default')}
                 >
-                  <option value="default">{core.has(tool.name) ? `${translate('defaultPolicy')} (${translate('alwaysPolicy')})` : translate('defaultPolicy')}</option>
+                  <option value="default">
+                    {`${translate('defaultPolicy')} (${translate(core.has(tool.name) ? 'alwaysPolicy' : 'deferredPolicy')})`}
+                  </option>
                   <option value="always">{translate('alwaysPolicy')}</option>
                   <option value="blocked">{translate('blockedPolicy')}</option>
                 </select>

@@ -24,7 +24,7 @@ async function exists(path) {
 
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
 check(pkg.name === '@anionex/dsh-tool-search', 'package name is incorrect')
-check(pkg.version === '0.1.0', 'release version is incorrect')
+check(pkg.version === '0.1.1', 'release version is incorrect')
 check(pkg.main === './lib/index.js', 'main entrypoint is incorrect')
 check(pkg.types === './lib/types/index.d.ts', 'types entrypoint is incorrect')
 check(pkg.exports?.['./client']?.default === './lib/client.js', 'client export is incorrect')

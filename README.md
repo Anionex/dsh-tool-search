@@ -29,13 +29,12 @@ The initial native schema surface contains:
 - DSH core tools maintained in `DEFAULT_CORE_TOOLS`
 - exact names added to `alwaysVisible`
 
-Version `0.1.0` treats these names as core:
+The default policy treats these names as core:
 
 ```text
-apply_patch, ask_user_question, bash, create_goal, dsh_im_return_file,
-exit_plan_mode, get_goal, interrupt_agent, job_kill, job_list, job_output,
-list_agents, ralph, report, send_message, skill, subagent, subagent_fork,
-todo_write, update_goal, workflow
+apply_patch, ask_user_question, bash, create_goal, exit_plan_mode, get_goal,
+interrupt_agent, job_kill, job_list, job_output, list_agents, ralph, report,
+send_message, skill, subagent, subagent_fork, todo_write, update_goal, workflow
 ```
 
 Every other registered tool is searchable but initially omitted. `neverSearch` hides a name from both the initial surface and the search corpus; it wins a conflict with `alwaysVisible`. `tool_search` itself cannot be blacklisted, preventing a configuration dead end.
