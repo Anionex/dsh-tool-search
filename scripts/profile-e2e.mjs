@@ -88,6 +88,16 @@ async function fixturePackage(directory) {
     '    },',
     '    execute: args => Promise.resolve({ echo: args.value }),',
     '  }))',
+    '  ctx.tools.register(defineTool({',
+    "    name: 'dsh_im_return_file',",
+    "    description: 'Send a readable file to the user through the conversation.',",
+    "    parameters: { path: { type: 'string', required: true, description: 'Readable file path.' } },",
+    '    output: {',
+    "      schema: { type: 'object', additionalProperties: false, properties: { sent: { type: 'boolean', required: true } } },",
+    "      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],",
+    '    },',
+    '    execute: () => Promise.resolve({ sent: true }),',
+    '  }))',
     '}',
     '',
   ].join('\n'))
@@ -341,7 +351,9 @@ try {
   const searchedNames = requestToolNames(llm.requests[1])
   assert(initialNames.includes('tool_search'), 'initial model call omits tool_search')
   assert(!initialNames.includes('fixture_echo'), 'initial model call exposes deferred fixture_echo')
+  assert(!initialNames.includes('dsh_im_return_file'), 'initial model call exposes plugin-provided dsh_im_return_file')
   assert(searchedNames.includes('fixture_echo'), 'next model call omits selected fixture_echo')
+  assert(!searchedNames.includes('dsh_im_return_file'), 'searching another tool exposes dsh_im_return_file')
   const searchResult = toolResultTexts(llm.requests[1]).at(-1) ?? ''
   assert(searchResult.includes('fixture_echo'), 'tool_search result omits fixture_echo summary')
   assert(!searchResult.includes('"parameters"'), 'tool_search result duplicates a full schema')

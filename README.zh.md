@@ -29,13 +29,12 @@ dsh plugin --profile web add @anionex/dsh-tool-search
 - `DEFAULT_CORE_TOOLS` 中维护的 DSH 核心工具
 - `alwaysVisible` 中配置的精确名称
 
-`0.1.0` 把以下名称视为核心工具：
+默认策略把以下名称视为核心工具：
 
 ```text
-apply_patch, ask_user_question, bash, create_goal, dsh_im_return_file,
-exit_plan_mode, get_goal, interrupt_agent, job_kill, job_list, job_output,
-list_agents, ralph, report, send_message, skill, subagent, subagent_fork,
-todo_write, update_goal, workflow
+apply_patch, ask_user_question, bash, create_goal, exit_plan_mode, get_goal,
+interrupt_agent, job_kill, job_list, job_output, list_agents, ralph, report,
+send_message, skill, subagent, subagent_fork, todo_write, update_goal, workflow
 ```
 
 其他已注册工具都可搜索，但默认不显示。`neverSearch` 同时从初始集合和搜索语料中隐藏名称，并在与 `alwaysVisible` 冲突时优先。`tool_search` 自身不能被拉黑，避免配置后无工具可发现。
