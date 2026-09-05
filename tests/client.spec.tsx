@@ -35,7 +35,7 @@ describe('Tool Search settings section', () => {
     expect(await screen.findByText('browser_take_screenshot')).toBeDefined()
     const imPolicy = screen.getByLabelText('Policy: dsh_im_return_file') as HTMLSelectElement
     expect(imPolicy.value).toBe('default')
-    expect(imPolicy.options[0]?.text).toBe('Default')
+    expect(imPolicy.options[0]?.text).toBe('Default (Deferred)')
     expect(screen.getAllByLabelText('Live agents: 0').map(element => element.getAttribute('data-label')))
       .toEqual(['Live agents', 'Live agents'])
     fireEvent.change(screen.getByLabelText('Policy: browser_take_screenshot'), { target: { value: 'always' } })
