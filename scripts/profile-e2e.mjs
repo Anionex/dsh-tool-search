@@ -1,11 +1,12 @@
 import { spawn } from 'node:child_process'
-import { access, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
+const packageVersion = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version
 const dsh = process.env.DSH_BIN ?? 'dsh'
 const keepTemp = process.argv.includes('--keep-temp')
 const timeoutMs = Number(process.env.DSH_TOOL_SEARCH_E2E_TIMEOUT_MS ?? 180_000)
@@ -104,8 +105,8 @@ async function fixturePackage(directory) {
 }
 
 async function startLlm(script = [
-  { kind: 'tool', name: 'tool_search', arguments: '{"query":"fixture_echo","limit":1}' },
-  { kind: 'tool', name: 'fixture_echo', arguments: '{"value":"real-agent-ok"}' },
+  { kind: 'tool', name: 'tool_search', arguments: '{"query":"dsh_im_return_file","limit":1}' },
+  { kind: 'tool', name: 'dsh_im_return_file', arguments: '{"path":"/tmp/tool-search-e2e.txt"}' },
   { kind: 'text', text: 'tool search e2e done' },
 ]) {
   const requests = []
@@ -352,13 +353,13 @@ try {
   assert(initialNames.includes('tool_search'), 'initial model call omits tool_search')
   assert(!initialNames.includes('fixture_echo'), 'initial model call exposes deferred fixture_echo')
   assert(!initialNames.includes('dsh_im_return_file'), 'initial model call exposes plugin-provided dsh_im_return_file')
-  assert(searchedNames.includes('fixture_echo'), 'next model call omits selected fixture_echo')
-  assert(!searchedNames.includes('dsh_im_return_file'), 'searching another tool exposes dsh_im_return_file')
+  assert(!searchedNames.includes('fixture_echo'), 'searching dsh_im_return_file exposes unrelated fixture_echo')
+  assert(searchedNames.includes('dsh_im_return_file'), 'next model call omits selected dsh_im_return_file')
   const searchResult = toolResultTexts(llm.requests[1]).at(-1) ?? ''
-  assert(searchResult.includes('fixture_echo'), 'tool_search result omits fixture_echo summary')
+  assert(searchResult.includes('dsh_im_return_file'), 'tool_search result omits dsh_im_return_file summary')
   assert(!searchResult.includes('"parameters"'), 'tool_search result duplicates a full schema')
-  const echoResult = toolResultTexts(llm.requests[2]).at(-1) ?? ''
-  assert(echoResult.includes('real-agent-ok'), 'fixture_echo did not execute through the real Agent loop')
+  const returnFileResult = toolResultTexts(llm.requests[2]).at(-1) ?? ''
+  assert(returnFileResult.includes('"sent":true'), 'dsh_im_return_file did not execute through the real Agent loop')
 
   process.stdout.write(`${JSON.stringify({
     ok: true,
@@ -368,8 +369,8 @@ try {
     modelCalls: llm.requests.length,
     initialToolCount: initialNames.length,
     selectedToolCount: searchedNames.length,
-    selectedOnNextCall: searchedNames.includes('fixture_echo'),
-    package: '@anionex/dsh-tool-search@0.1.0',
+    selectedOnNextCall: searchedNames.includes('dsh_im_return_file'),
+    package: `@anionex/dsh-tool-search@${packageVersion}`,
     temporaryHome: keepTemp ? home : undefined,
   }, null, 2)}\n`)
 } finally {
