@@ -334,7 +334,7 @@ try {
   const runResult = await runDsh([
     '--profile', 'headless',
     '--patch', patch,
-    'Find and call the fixture echo tool.',
+    'Find and call the tool that returns a file through the conversation.',
   ], {
     cwd: workspaceDirectory,
     env: {
