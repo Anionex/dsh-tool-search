@@ -10,6 +10,17 @@ const packageVersion = JSON.parse(await readFile(join(root, 'package.json'), 'ut
 const dsh = process.env.DSH_BIN ?? 'dsh'
 const keepTemp = process.argv.includes('--keep-temp')
 const timeoutMs = Number(process.env.DSH_TOOL_SEARCH_E2E_TIMEOUT_MS ?? 180_000)
+const maxModelRequests = Number(process.env.DSH_TOOL_SEARCH_E2E_MAX_REQUESTS ?? 12)
+
+/**
+ * PTC presentation is selected by name: DSH renders it as `code` up to 0.1.1
+ * and as `ptc` from 0.1.2. Override with DSH_TOOL_SEARCH_PRESENTATION_MODE.
+ */
+function presentationModeFor(version) {
+  const override = process.env.DSH_TOOL_SEARCH_PRESENTATION_MODE
+  if (override !== undefined && override !== '') return override
+  return version.startsWith('0.1.0') || version.startsWith('0.1.1') ? 'code' : 'ptc'
+}
 
 function run(command, args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -129,7 +140,19 @@ async function startLlm(script = [
         return
       }
       requests.push(body)
-      const step = script[index++]
+      const names = requestToolNames(body)
+      const last = body?.messages?.at(-1)
+      process.stderr.write(
+        `[e2e] model request #${requests.length} tools=[${names.join(',')}] `
+        + `last=${JSON.stringify(last?.role ?? 'none')}:${JSON.stringify(String(last?.content ?? '').slice(0, 80))}\n`,
+      )
+      if (requests.length > maxModelRequests) {
+        // A runaway loop must fail here instead of growing the recorded bodies.
+        response.writeHead(500, { 'content-type': 'application/json' })
+        response.end(JSON.stringify({ error: { message: `request-limit-${maxModelRequests}` } }))
+        return
+      }
+      const step = typeof script === 'function' ? script(body) : script[index++]
       if (step === undefined) {
         response.writeHead(500, { 'content-type': 'application/json' })
         response.end('{"error":{"message":"script-exhausted"}}')
@@ -189,6 +212,19 @@ async function startLlm(script = [
 
 function requestToolNames(body) {
   return body?.tools?.map(tool => tool?.function?.name).filter(name => typeof name === 'string') ?? []
+}
+
+function messageText(body) {
+  return body?.messages
+    ?.filter(message => message?.role === 'system' || message?.role === 'developer')
+    .map(message => typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? ''))
+    .join('\n') ?? ''
+}
+
+function conversationText(body) {
+  return body?.messages
+    ?.map(message => typeof message.content === 'string' ? message.content : JSON.stringify(message.content ?? ''))
+    .join('\n') ?? ''
 }
 
 function toolResultTexts(body) {
@@ -361,6 +397,112 @@ try {
   const returnFileResult = toolResultTexts(llm.requests[2]).at(-1) ?? ''
   assert(returnFileResult.includes('"sent":true'), 'dsh_im_return_file did not execute through the real Agent loop')
 
+  const presentationChooser = step => {
+    // Under PTC the model only reaches tools through run_code, so the scripted
+    // calls are programs that search first and dispatch the selection after.
+    const names = requestToolNames(step)
+    if (!names.includes('run_code')) return { kind: 'text', text: 'auxiliary call' }
+    const transcript = conversationText(step)
+    // Match compact and pretty-printed results alike; a literal match loops.
+    if (/"sent"\s*:\s*true/u.test(transcript)) return { kind: 'text', text: 'presentation e2e done' }
+    if (transcript.includes('dsh_im_return_file') && transcript.includes('tool_search')) {
+      return {
+        kind: 'tool',
+        name: 'run_code',
+        arguments: JSON.stringify({
+          code: "const sent = await tools.dsh_im_return_file({ path: '/tmp/tool-search-e2e.txt' })\nreturn sent",
+          description: 'Return the file through the selected tool',
+        }),
+      }
+    }
+    return {
+      kind: 'tool',
+      name: 'run_code',
+      arguments: JSON.stringify({
+        code: "const selected = await tools.tool_search({ query: 'dsh_im_return_file', limit: 1 })\nreturn selected",
+        description: 'Search deferred tools',
+      }),
+    }
+  }
+
+  /** Run the presentation pass in one mode, asserting the loader-level guarantees. */
+  const runPresentationPass = async mode => {
+    const presentationLlm = await startLlm(presentationChooser)
+    try {
+      const presentationResult = await runDsh([
+        '--profile', 'headless',
+        '--patch', patch,
+        'Find and call the tool that returns a file through the conversation.',
+      ], {
+        cwd: workspaceDirectory,
+        env: {
+          DSH_HOME: home,
+          DSH_TOOLS_MODE: mode,
+          DSH_TELEMETRY_DISABLED: '1',
+          DSH_PERMISSION_MODE: 'danger-full-access',
+          DEEPSEEK_API_KEY: 'tool-search-e2e-key',
+          DEEPSEEK_BASE_URL: presentationLlm.baseUrl,
+        },
+      })
+      assert(
+        presentationResult.stdout.trim() === 'presentation e2e done',
+        `unexpected ${mode}-mode Agent output: ${presentationResult.stdout}`,
+      )
+      const agentRequests = presentationLlm.requests.filter(body => requestToolNames(body).includes('run_code'))
+      assert(agentRequests.length === 3, `expected 3 ${mode}-mode model calls, received ${agentRequests.length}`)
+      const first = agentRequests[0]
+      assert(
+        requestToolNames(first).join(',') === 'run_code',
+        `${mode} assembly exposes more than the reserved transport: ${requestToolNames(first).join(',')}`,
+      )
+      const firstText = messageText(first)
+      assert(firstText.includes('tool_search'), `${mode} SDK omits the searchable tool_search`)
+      assert(firstText.includes('bash'), `${mode} SDK omits the always-visible bash`)
+      assert(!firstText.includes('fixture_echo'), `${mode} SDK advertises deferred fixture_echo`)
+      assert(!firstText.includes('dsh_im_return_file'), `${mode} SDK advertises deferred dsh_im_return_file`)
+      const afterSelection = agentRequests[1]
+      const afterText = messageText(afterSelection)
+      assert(afterText.includes('dsh_im_return_file'), `${mode} SDK omits the tool selected by tool_search`)
+      assert(!afterText.includes('fixture_echo'), `${mode} SDK advertises unrelated fixture_echo after search`)
+      assert(
+        presentationLlm.requests.some(body => /"sent"\s*:\s*true/u.test(conversationText(body))),
+        `the selected tool did not dispatch through run_code under ${mode}`,
+      )
+      return {
+        mode,
+        modelCalls: agentRequests.length,
+        transportOnly: true,
+        sdkHasToolSearch: true,
+        sdkHidesDeferredBeforeSearch: true,
+        sdkAddsSelectionAfterSearch: true,
+        selectedToolDispatched: true,
+      }
+    } finally {
+      await presentationLlm.close()
+    }
+  }
+
+  // The presentation name for the PTC collapse is `code` up to DSH 0.1.1 and
+  // `ptc` from 0.1.2. The guess is validated against the host, and a rejected
+  // name is retried once with the other spelling.
+  const presentationModes = [presentationModeFor(dshVersion)]
+  presentationModes.push(presentationModes[0] === 'ptc' ? 'code' : 'ptc')
+  let presentation
+  let modeRejection
+  for (const [index, mode] of presentationModes.entries()) {
+    try {
+      presentation = await runPresentationPass(mode)
+      break
+    } catch (error) {
+      const text = String(error)
+      // The loader reports `expected "native" | "ptc" | "both" but got "code"`.
+      const rejectedName = /expected[\s\S]{0,80}but got\s+"[a-z]+"/u.test(text)
+      if (!rejectedName || index === presentationModes.length - 1) throw error
+      modeRejection = text.split('\n').find(line => line.includes('but got'))?.trim()
+    }
+  }
+
+
   process.stdout.write(`${JSON.stringify({
     ok: true,
     dsh: dshVersion,
@@ -370,6 +512,9 @@ try {
     initialToolCount: initialNames.length,
     selectedToolCount: searchedNames.length,
     selectedOnNextCall: searchedNames.includes('dsh_im_return_file'),
+    presentation,
+    modeRejection,
+    dshScript,
     package: `@anionex/dsh-tool-search@${packageVersion}`,
     temporaryHome: keepTemp ? home : undefined,
   }, null, 2)}\n`)

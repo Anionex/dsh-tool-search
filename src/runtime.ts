@@ -5,6 +5,9 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import {
   defineTool,
+  renderToolsSdk,
+  renderToolsSdkPy,
+  RUN_CODE_NAME,
   type ToolDefinition,
   type ToolExecution,
   type ToolExecutionResult,
@@ -16,6 +19,8 @@ import { ToolPolicyResolver, normalizeSettings } from './settings.ts'
 import {
   MAX_RESULT_LIMIT,
   TOOL_SEARCH_NAME,
+  TOOL_SDK_LANGUAGE_MARKERS,
+  TOOL_SDK_SECTION_NAME,
   type CatalogSnapshot,
   type ToolSearchSettings,
 } from './shared.ts'
@@ -23,6 +28,16 @@ import {
 const RESULT_SCHEMA_VERSION = 1
 const MAX_QUERY_LENGTH = 4096
 const MAX_DESCRIPTION_LENGTH = 240
+
+/** One entry of the generated PTC SDK contract, as `renderToolsSdk` expects it. */
+type SdkSchema = Parameters<typeof renderToolsSdk>[0][number]
+
+/** The subset of a registered tool definition the SDK projection consumes. */
+interface ToolDefinitionLike {
+  description?: string
+  parameters?: unknown
+  output?: { schema?: unknown }
+}
 
 export interface ToolSearchMatch {
   name: string
@@ -296,31 +311,123 @@ export class ToolSearchRuntime {
     return state
   }
 
-  private refreshCatalog(state: AgentState): void {
-    if (state.catalogGeneration === this.generation) return
-    state.catalog = buildCatalog(this.ctx.tools.schemas(state.agent) as ToolSchemaLike[])
-    state.catalogGeneration = this.generation
+  /**
+   * The searchable registry view for one Agent: every tool it could reach,
+   * whether or not the current presentation shows it.
+   *
+   * The reserved PTC transport is excluded: it is never searchable, never
+   * constrained by policy, and never part of the generated SDK it carries.
+   * Reading the registry (rather than the assembled schemas) is what keeps the
+   * corpus complete under PTC presentation, where the assembly itself carries
+   * only `run_code`.
+   */
+  private refreshCatalog(state: AgentState): ToolCatalogEntry[] {
+    if (state.catalogGeneration !== this.generation) {
+      state.catalog = buildCatalog(
+        (this.ctx.tools.schemas(state.agent) as ToolSchemaLike[])
+          .filter(tool => tool.name !== RUN_CODE_NAME),
+      )
+      state.catalogGeneration = this.generation
+    }
+    return state.catalog
   }
 
+  /**
+   * Hide every deferred tool from one final assembly.
+   *
+   * Two surfaces carry tools and both must agree: the native schema list plus
+   * its `tool:<name>` guidance sections, and — under `ptc`/`both` — the
+   * generated `tools:sdk` section. The SDK text is regenerated with the same
+   * renderer `dsh-tools` uses, from the surviving tools alone, so the filtered
+   * assembly is byte-identical to the one the registry would have built for
+   * that smaller tool set.
+   */
   private filterAssembly(state: AgentState, assembly: PromptAssembly): PromptAssembly {
-    if (assembly.sections.some(section => section.name === 'tools:sdk' && section.text.trim().length > 0)) {
-      throw new Error('dsh-tool-search requires native tool presentation; code/PTC and both modes are unsupported')
-    }
-    state.catalog = buildCatalog(assembly.tools as ToolSchemaLike[])
-    state.catalogGeneration = this.generation
+    const catalog = this.refreshCatalog(state)
+    const known = new Set(catalog.map(tool => tool.name))
     const visible = new Set(
-      assembly.tools
+      catalog
         .map(tool => tool.name)
         .filter(name => this.policy.classify(name, state.selected) === 'always'),
     )
-    const hidden = new Set(assembly.tools.map(tool => tool.name).filter(name => !visible.has(name)))
-    return {
-      ...assembly,
-      tools: assembly.tools.filter(tool => visible.has(tool.name)),
-      sections: assembly.sections.filter(section => {
+    const hidden = new Set(catalog.map(tool => tool.name).filter(name => !visible.has(name)))
+    const tools = assembly.tools.filter(tool => !known.has(tool.name) || visible.has(tool.name))
+    let sdkRewritten = false
+    const sections = assembly.sections
+      .filter(section => {
         const name = toolSectionName(section.name)
         return name === undefined || !hidden.has(name)
-      }),
+      })
+      .map(section => {
+        // An empty SDK section is an Agent-scoped opt-out of PTC presentation
+        // (a native override under a PTC deployment): there is nothing to filter.
+        if (section.name !== TOOL_SDK_SECTION_NAME || hidden.size === 0 || section.text.trim().length === 0) {
+          return section
+        }
+        const text = this.renderSdk(state, visible, section.text)
+        if (text === section.text) return section
+        sdkRewritten = true
+        return { ...section, text }
+      })
+    if (tools.length === assembly.tools.length && sections.length === assembly.sections.length && !sdkRewritten) {
+      return assembly
     }
+    return { ...assembly, tools, sections }
+  }
+
+  /**
+   * Rebuild the PTC SDK section for the surviving tools.
+   *
+   * The flavor must be the one the session already programs against, so it
+   * comes from the mounted code runtime; a host that cannot answer for it
+   * falls back to the marker the existing section was rendered with.
+   */
+  private renderSdk(state: AgentState, visible: ReadonlySet<string>, original: string): string {
+    const render = this.resolveSdkRenderer(original)
+    const schemas: SdkSchema[] = []
+    for (const tool of state.catalog) {
+      if (!visible.has(tool.name)) continue
+      const definition = this.toolDefinition(tool.name, state.agent)
+      schemas.push({
+        name: tool.name,
+        description: definition?.description ?? tool.description,
+        parameters: cloneJson(definition?.parameters ?? tool.parameters) as SdkSchema['parameters'],
+        output: cloneJson(definition?.output?.schema ?? {}) as SdkSchema['output'],
+      })
+    }
+    return render(schemas)
+  }
+
+  private resolveSdkRenderer(original: string): (schemas: SdkSchema[]) => string {
+    const runtime = this.codeRuntime()
+    if (runtime.language === 'typescript') return renderToolsSdk
+    if (runtime.language === 'python') return renderToolsSdkPy
+    if (original.includes(TOOL_SDK_LANGUAGE_MARKERS.python)) return renderToolsSdkPy
+    if (original.includes(TOOL_SDK_LANGUAGE_MARKERS.typescript)) return renderToolsSdk
+    throw new Error(
+      `${TOOL_SEARCH_NAME}: cannot filter the generated tool SDK for code runtime language `
+      + `${JSON.stringify(runtime.language ?? 'unknown')}`,
+    )
+  }
+
+  private codeRuntime(): { language?: unknown } {
+    const runtime = (this.ctx as unknown as { get?: (name: string) => unknown }).get?.('codeRuntime')
+    return typeof runtime === 'object' && runtime !== null ? runtime as { language?: unknown } : {}
+  }
+
+  private toolDefinition(name: string, agent: Agent): ToolDefinitionLike | undefined {
+    const registry = this.ctx.tools as unknown as { get?: (name: string, scope?: unknown) => unknown }
+    if (typeof registry.get !== 'function') return undefined
+    const definition = registry.get(name, agent)
+    return typeof definition === 'object' && definition !== null ? definition as ToolDefinitionLike : undefined
+  }
+}
+
+/** Lossless clone of a schema node; a value that cannot be cloned is used as-is. */
+function cloneJson<T>(value: T): T {
+  try {
+    return structuredClone(value)
+  } catch {
+    return value
   }
 }

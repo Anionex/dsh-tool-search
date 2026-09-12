@@ -1,5 +1,6 @@
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
+import { renderToolsSdk } from '@deepseek-ai/dsh-tools'
 import { describe, expect, it, vi } from 'vitest'
 import type { ToolSchemaLike } from '../src/catalog.ts'
 import { ToolSearchRuntime, type ToolSearchResult } from '../src/runtime.ts'
@@ -251,11 +252,25 @@ describe('ToolSearchRuntime', () => {
     app.dispose()
   })
 
-  it('rejects code and both presentation assemblies', async () => {
+  it('filters the generated SDK section instead of rejecting PTC and both assemblies', async () => {
     const app = harness()
     const assembly = app.assembly()
-    assembly.sections.push({ name: 'tools:sdk', text: 'generated tool SDK' })
-    await expect(app.agents[0]!.assemble(assembly)).rejects.toThrow(/requires native tool presentation/u)
+    assembly.sections.push({
+      name: 'tools:sdk',
+      text: renderToolsSdk(assembly.tools.map(tool => ({
+        name: tool.name,
+        description: tool.description ?? '',
+        parameters: tool.parameters,
+        output: {},
+      }))),
+    })
+    const filtered = await app.agents[0]!.assemble(assembly)
+    expect(filtered.tools.map(tool => tool.name)).toEqual(['apply_patch', TOOL_SEARCH_NAME])
+    const sdk = filtered.sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+    expect(sdk).toContain('apply_patch')
+    expect(sdk).toContain(TOOL_SEARCH_NAME)
+    expect(sdk).not.toContain('web_search')
+    expect(sdk).not.toContain('browser_take_screenshot')
     app.dispose()
   })
 

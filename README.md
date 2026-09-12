@@ -16,13 +16,13 @@ On affected Node.js 24+ standalone DSH launchers, a bare external Profile packag
 
 Requirements:
 
-- DSH `0.1.1-rc.1` through the current `0.1.2-rc.1` prerelease line
+- DSH `0.1.1-rc.1` through the current `0.1.5-rc.1` prerelease line
 - Node.js `^22.19.0 || >=24.0.0`
-- Native tool presentation mode
+- Any tool presentation mode: `native`, `ptc` (DSH ≤ `0.1.1` calls it `code`), or `both`
 
 ## Behavior
 
-The initial native schema surface contains:
+The initial model-facing tool surface contains:
 
 - `tool_search`
 - `apply_patch`
@@ -48,6 +48,16 @@ The selected set is:
 - re-evaluated against live settings without deleting its history.
 
 Tool and prompt registry changes invalidate every cached catalog. The next assembly or search rebuilds from current scoped schemas.
+
+## Presentation Modes
+
+DSH renders the tool surface per scope: `native` lists JSON schemas, `ptc` (`code` before DSH `0.1.2`) collapses that list to the reserved `run_code` transport plus a generated `tools:sdk` prompt section, and `both` renders native schemas and the SDK together. The plugin filters every surface the assembly carries:
+
+- `assembly.tools` keeps only the visible names, so `run_code` survives while deferred schemas stay absent;
+- `tool:<name>` guidance sections for hidden tools are dropped;
+- the `tools:sdk` section is regenerated with the same renderer DSH uses (`renderToolsSdk` / `renderToolsSdkPy`, matching the selected code runtime language), so the SDK advertises exactly the visible tool set.
+
+The search corpus itself comes from the Agent's scoped registry view, not from the assembly, so under PTC - where the assembly only carries `run_code` - every deferred tool stays searchable. A tool selected by `tool_search` then appears on the next model turn in whatever surface the deployment renders, and becomes callable through `run_code`.
 
 ## Settings
 
@@ -143,11 +153,12 @@ pnpm validate
 pnpm run e2e:profile
 ```
 
-The test suite covers document construction, exact-name Recall@1, capability Recall@5, stable ties, per-Agent isolation, monotonic growth, registry refresh, result shape, final-success commit, post-execute rejection and rewrite, one-turn loading, resume/fork recovery, live settings, Web controls, and the real DSH approval/guard/event/execution pipeline. The profile E2E installs the packed plugin into a clean `DSH_HOME` and drives a scripted real Agent through search, next-turn schema exposure, and a real-name tool call. Release validation runs this E2E on DSH `0.1.1-rc.1` and `0.1.2-rc.1`.
+The test suite covers document construction, exact-name Recall@1, capability Recall@5, stable ties, per-Agent isolation, monotonic growth, registry refresh, result shape, final-success commit, post-execute rejection and rewrite, one-turn loading, resume/fork recovery, live settings, Web controls, native/PTC/`both` assembly filtering, and the real DSH approval/guard/event/execution pipeline. The profile E2E installs the packed plugin into a clean `DSH_HOME` and drives a scripted real Agent twice: once in the deployment's default native presentation, and once with `DSH_TOOLS_MODE` set to the PTC presentation name for that DSH version. The PTC pass asserts that the reserved transport is the only direct tool, that the generated SDK hides deferred tools, that a selected tool reaches the next SDK, and that the selection dispatches through `run_code`. Release validation runs this E2E on DSH `0.1.1-rc.1` (`code`), `0.1.2-rc.1`, and `0.1.5-rc.1` (`ptc`).
 
 ## Known Limits
 
-- Native mode is required. DSH code/PTC and `both` modes independently render a `tools:sdk` prompt section; the stable plugin API does not expose a filtered SDK renderer. The plugin rejects those assemblies with a clear error instead of leaving search unavailable while leaking the unfiltered SDK.
+- Regenerating `tools:sdk` depends on the renderers DSH exports (`renderToolsSdk`, `renderToolsSdkPy`). A future DSH that renames the section or stops exporting a renderer makes the plugin fail loudly for that Agent instead of degrading to an unfiltered SDK.
+- Under PTC a model that names a deferred-but-unselected tool resolves to `UNKNOWN_TOOL` inside `run_code`: the plugin withholds the schema, the registry still refuses the dispatch, and no forged definition can reach execution.
 - On some Node.js 24+ builds, the DSH `0.1.2-rc.1` standalone launcher cannot access Node's internal ESM loader and therefore cannot resolve any bare external Profile package. If startup reports `Cannot find package '@anionex/dsh-tool-search'`, launch with `node --expose-internals "$(command -v dsh)" --profile <name> ...`. CI requires standard bare-package loading on Node 22; the Profile E2E records whether a local run needed this launcher workaround.
 - Tool definitions do not expose package provenance. Newly introduced DSH core names default to deferred until this package updates `DEFAULT_CORE_TOOLS` or the user adds an allowlist entry.
 - Exact `tool:<name>` guidance is filtered with a hidden schema. Arbitrary third-party prompt sections have no tool provenance and cannot be safely rewritten.

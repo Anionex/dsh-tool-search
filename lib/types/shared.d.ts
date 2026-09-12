@@ -4,6 +4,18 @@ export declare const TOOL_SEARCH_SETTINGS_NAMESPACE = "tool-search";
 export declare const TOOL_SEARCH_CATALOG_ROUTE = "/_dsh/tool-search/catalog";
 export declare const DEFAULT_RESULT_LIMIT = 5;
 export declare const MAX_RESULT_LIMIT = 20;
+/** Prompt section carrying the generated PTC tool SDK (`ptc` and `both` modes). */
+export declare const TOOL_SDK_SECTION_NAME = "tools:sdk";
+/**
+ * Markers identifying which renderer produced an SDK section we did not
+ * assemble ourselves. Used only when the code runtime cannot be read from the
+ * context, because the renderer must match the flavor the model was told to
+ * program against.
+ */
+export declare const TOOL_SDK_LANGUAGE_MARKERS: Readonly<{
+    readonly typescript: "interface ToolArgsMap";
+    readonly python: "class Tools(Protocol)";
+}>;
 /**
  * Stable bootstrap surface for current DSH releases. Unknown future first-party
  * names are deferred until this list or the user allowlist is updated because

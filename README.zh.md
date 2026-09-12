@@ -16,13 +16,13 @@ dsh plugin --profile web add @anionex/dsh-tool-search
 
 要求：
 
-- DSH `0.1.1-rc.1` 至当前 `0.1.2-rc.1` 预发布版本线
+- DSH `0.1.1-rc.1` 至当前 `0.1.5-rc.1` 预发布版本线
 - Node.js `^22.19.0 || >=24.0.0`
-- 原生工具展示模式
+- 任意工具展示模式：`native`、`ptc`（DSH ≤ `0.1.1` 里叫 `code`）或 `both`
 
 ## 行为
 
-初始原生 schema 集合包含：
+初始模型可见工具集合包含：
 
 - `tool_search`
 - `apply_patch`
@@ -48,6 +48,16 @@ send_message, skill, subagent, subagent_fork, todo_write, update_goal, workflow
 - 设置变化只改变当前有效可见性，不删除已选历史。
 
 工具或提示词注册表变化会让全部缓存目录失效。下一次 assembly 或搜索按当前作用域 schema 重建索引。
+
+## 展示模式
+
+DSH 按作用域渲染工具面：`native` 直接列出 JSON schema；`ptc`（DSH `0.1.2` 之前叫 `code`）把 schema 列表收缩为保留传输 `run_code`，再加一段生成的 `tools:sdk` 提示词段；`both` 同时渲染原生 schema 与 SDK。插件会过滤 assembly 实际携带的每一层：
+
+- `assembly.tools` 只保留可见名称，因此 `run_code` 保留、延迟工具的 schema 不出现；
+- 隐藏工具对应的 `tool:<name>` 指引段被删除；
+- `tools:sdk` 段用 DSH 自己的渲染器（`renderToolsSdk` / `renderToolsSdkPy`，与当前 code runtime 语言一致）重新生成，使 SDK 恰好宣传可见工具集合。
+
+搜索语料来自该 Agent 的作用域注册表视图，而不是 assembly；因此即使 PTC 下 assembly 只有 `run_code`，全部延迟工具依然可被搜索。`tool_search` 选中的工具会在下一次模型轮次按当前部署的渲染方式出现，并可通过 `run_code` 调用。
 
 ## 设置
 
@@ -143,11 +153,12 @@ pnpm validate
 pnpm run e2e:profile
 ```
 
-测试覆盖文档构造、精确名称 Recall@1、能力 Recall@5、同分稳定性、Agent 隔离、集合单调增长、注册表刷新、结果形状、最终成功后提交、post-execute 拒绝与改写、只多一轮加载、resume/fork 恢复、实时设置、Web 控件，以及真实 DSH approval/guard/event/execute 链。Profile E2E 会把打包产物安装到全新 `DSH_HOME`，再驱动一个脚本化真实 Agent 完成搜索、下一轮 schema 可见和真实名称调用。发布验收会在 DSH `0.1.1-rc.1` 和 `0.1.2-rc.1` 上分别运行该 E2E。
+测试覆盖文档构造、精确名称 Recall@1、能力 Recall@5、同分稳定性、Agent 隔离、集合单调增长、注册表刷新、结果形状、最终成功后提交、post-execute 拒绝与改写、只多一轮加载、resume/fork 恢复、实时设置、Web 控件、native/PTC/`both` 三种 assembly 过滤，以及真实 DSH approval/guard/event/execute 链。Profile E2E 会把打包产物安装到全新 `DSH_HOME`，并两次驱动脚本化真实 Agent：一次用部署默认的 native 展示，一次把 `DSH_TOOLS_MODE` 设成该 DSH 版本对应的 PTC 名称。PTC 那一轮会断言：直接可见工具只有保留传输 `run_code`、生成的 SDK 隐藏延迟工具、被选中的工具出现在下一轮 SDK、并且该选择确实通过 `run_code` 完成派发。发布验收会在 DSH `0.1.1-rc.1`（`code`）、`0.1.2-rc.1` 与 `0.1.5-rc.1`（`ptc`）上运行该 E2E。
 
 ## 已知限制
 
-- 必须使用原生模式。DSH code/PTC 和 `both` 模式会独立渲染 `tools:sdk` 提示词段；稳定插件 API 没有过滤 SDK 的渲染钩子。插件会用明确错误拒绝这些 assembly，避免搜索不可用时仍泄露未过滤 SDK。
+- 重新生成 `tools:sdk` 依赖 DSH 导出的渲染器（`renderToolsSdk`、`renderToolsSdkPy`）。若未来 DSH 改名该段或不再导出渲染器，插件会让该 Agent 明确报错，而不是降级成未过滤的 SDK。
+- PTC 下模型若直接点名“延迟但未选中”的工具，会在 `run_code` 内得到 `UNKNOWN_TOOL`：插件不提供其 schema，注册表仍然拒绝派发，伪造的定义无法进入执行。
 - 部分 Node.js 24+ 版本下，DSH `0.1.2-rc.1` 独立启动器无法访问 Node 内部 ESM loader，因而不能解析任何 Profile 中以裸包名安装的外部插件。若启动时报 `Cannot find package '@anionex/dsh-tool-search'`，请改用 `node --expose-internals "$(command -v dsh)" --profile <name> ...`。CI 会在 Node 22 上强制验证标准裸包名加载；Profile E2E 也会记录本地运行是否用到了这一启动器兼容方案。
 - 工具定义不提供包来源。新加入的 DSH 核心工具默认延迟，直到本包更新 `DEFAULT_CORE_TOOLS`，或用户加入白名单。
 - 插件会随隐藏 schema 一起过滤精确 `tool:<name>` 指引。任意第三方提示词段没有工具来源，无法可靠改写。
