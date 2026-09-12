@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "packageVersion": "0.1.1",
+  "packageVersion": "0.1.2",
   "tokenizer": "gpt-tokenizer 4.0.0 (o200k_base default encode)",
   "fixture": {
     "description": "Deterministic nested function schemas; full surface versus tool_search-only initial surface.",
